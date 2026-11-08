@@ -3,9 +3,10 @@ from pathlib import Path
 
 import pandas as pd
 
-RAW_CSV_PATH = Path("data/raw/cs-training.csv")
-DB_PATH = Path("data/processed/credit.db")
-SCHEMA_PATH = Path("sql/schema.sql")
+ROOT = Path(__file__).resolve().parents[1]
+RAW_CSV_PATH = ROOT / "data/raw/cs-training.csv"
+DB_PATH = ROOT / "data/processed/credit.db"
+SCHEMA_PATH = ROOT / "sql/schema.sql"
 
 COLUMN_MAPPING = {
     "Unnamed: 0": "id",
@@ -39,13 +40,22 @@ def main() -> None:
     if "id" not in df.columns:
         df.insert(0, "id", range(1, len(df) + 1))
 
+    from preprocess import FEATURE_COLUMNS, TARGET
+    missing = set(FEATURE_COLUMNS + [TARGET]) - set(df.columns)
+    if missing:
+        raise ValueError(f"Missing required columns: {sorted(missing)}")
+    if df["id"].isna().any() or df["id"].duplicated().any():
+        raise ValueError("Borrower IDs must be unique and nonmissing.")
+    if df[TARGET].isna().any() or not df[TARGET].isin([0, 1]).all():
+        raise ValueError("Expected labeled training data with a binary target.")
+    df = df[["id", TARGET] + FEATURE_COLUMNS]
     print(f"Строк: {len(df)}, колонок: {len(df.columns)}")
 
     conn = sqlite3.connect(DB_PATH)
     try:
         schema_sql = SCHEMA_PATH.read_text(encoding="utf-8")
         conn.executescript(schema_sql)
-        df.to_sql("credit_data", conn, if_exists="replace", index=False)
+        df.to_sql("credit_data", conn, if_exists="append", index=False)
         conn.commit()
         print(f"Данные загружены в {DB_PATH}, таблица credit_data")
     finally:

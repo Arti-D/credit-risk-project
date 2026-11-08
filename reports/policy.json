@@ -1,0 +1,31 @@
+{
+  "selected_model": "xgboost",
+  "selection_metric": "validation ROC-AUC",
+  "target_validation_recall": 0.8,
+  "validation": {
+    "threshold": 0.4405442774295807,
+    "precision": 0.1952288218111003,
+    "recall": 0.8,
+    "f1": 0.31386361412777614,
+    "approval_rate": 0.7261333333333333,
+    "observed_bad_rate_approved": 0.0184080058758722,
+    "true_positives": 1604,
+    "false_positives": 6612,
+    "false_negatives": 401,
+    "true_negatives": 21383
+  },
+  "test": {
+    "threshold": 0.4405442774295807,
+    "precision": 0.19635578997842243,
+    "recall": 0.8169576059850374,
+    "f1": 0.31661351116265585,
+    "approval_rate": 0.7219333333333333,
+    "observed_bad_rate_approved": 0.016945239634315264,
+    "true_positives": 1638,
+    "false_positives": 6704,
+    "false_negatives": 367,
+    "true_negatives": 21291
+  },
+  "bootstrap_replicates": 200,
+  "test_note": "Evaluate once after freezing model and threshold."
+}

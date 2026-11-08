@@ -1,0 +1,24 @@
+{
+  "seed": 42,
+  "split": "60/20/20 stratified",
+  "primary_metric": "roc_auc",
+  "raw_csv_sha256": "1bd46da486a5708c58c7b01a034fae2a13b327f6f7b62ea7ba4fe3b5824b24ac",
+  "rows": {
+    "train": 90000,
+    "validation": 30000,
+    "test": 30000
+  },
+  "target_rate": {
+    "train": 0.06684444444444444,
+    "validation": 0.06683333333333333,
+    "test": 0.06683333333333333
+  },
+  "python": "3.14.3",
+  "packages": {
+    "pandas": "2.3.3",
+    "numpy": "2.5.4",
+    "scikit-learn": "1.9.1",
+    "xgboost": "3.4.1",
+    "joblib": "1.6.0"
+  }
+}
