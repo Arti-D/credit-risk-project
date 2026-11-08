@@ -1,73 +1,67 @@
-from pathlib import Path
+"""Fit complete pipelines; compare candidates on validation only."""
+import hashlib
+import json
+import platform
+from importlib.metadata import version
 
 import joblib
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import average_precision_score, roc_auc_score
+from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from xgboost import XGBClassifier
 
-from preprocess import load_and_split
+from preprocess import ROOT, load_splits, preprocessing
 
-MODELS_DIR = Path("models")
-MODELS_DIR.mkdir(exist_ok=True)
-
-
-def evaluate(name: str, model, X_test, y_test, proba) -> dict:
-    roc_auc = roc_auc_score(y_test, proba)
-    pr_auc = average_precision_score(y_test, proba)
-    print(f"{name:22s} ROC-AUC={roc_auc:.4f}  PR-AUC={pr_auc:.4f}")
-    return {"model": name, "roc_auc": roc_auc, "pr_auc": pr_auc}
+MODELS_DIR = ROOT / "models/current"
 
 
-def main() -> None:
-    X_train, X_test, y_train, y_test = load_and_split()
+def build_models(y_train):
+    ratio = (y_train == 0).sum() / (y_train == 1).sum()
+    estimators = {
+        "logistic_regression": Pipeline([
+            ("scale", StandardScaler()),
+            ("model", LogisticRegression(max_iter=2000, class_weight="balanced", random_state=42))]),
+        "random_forest": RandomForestClassifier(
+            n_estimators=300, max_depth=10, class_weight="balanced", random_state=42, n_jobs=-1),
+        "xgboost": XGBClassifier(n_estimators=300, max_depth=4, learning_rate=.05,
+            scale_pos_weight=ratio, eval_metric="auc", random_state=42, n_jobs=-1),
+    }
+    return {name: Pipeline([("preprocess", preprocessing()), ("model", model)])
+            for name, model in estimators.items()}
 
-    results = []
 
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
-
-    log_reg = LogisticRegression(max_iter=1000, class_weight="balanced")
-    log_reg.fit(X_train_scaled, y_train)
-    proba = log_reg.predict_proba(X_test_scaled)[:, 1]
-    results.append(evaluate("LogisticRegression", log_reg, X_test, y_test, proba))
-    joblib.dump({"model": log_reg, "scaler": scaler}, MODELS_DIR / "logreg.pkl")
-
-    # --- Random Forest (бэггинг) ---
-    rf = RandomForestClassifier(
-        n_estimators=300,
-        max_depth=10,
-        class_weight="balanced",
-        random_state=42,
-        n_jobs=-1,
-    )
-    rf.fit(X_train, y_train)
-    proba = rf.predict_proba(X_test)[:, 1]
-    results.append(evaluate("RandomForest", rf, X_test, y_test, proba))
-    joblib.dump(rf, MODELS_DIR / "random_forest.pkl")
-
-    scale_pos_weight = (y_train == 0).sum() / (y_train == 1).sum()
-    xgb = XGBClassifier(
-        n_estimators=300,
-        max_depth=4,
-        learning_rate=0.05,
-        scale_pos_weight=scale_pos_weight,
-        eval_metric="auc",
-        random_state=42,
-        n_jobs=-1,
-    )
-    xgb.fit(X_train, y_train)
-    proba = xgb.predict_proba(X_test)[:, 1]
-    results.append(evaluate("XGBoost", xgb, X_test, y_test, proba))
-    joblib.dump(xgb, MODELS_DIR / "xgboost_baseline.pkl")
-
-    results_df = pd.DataFrame(results)
-    results_df.to_csv(MODELS_DIR / "baseline_results.csv", index=False)
-    print("\nРезультаты сохранены в models/baseline_results.csv")
-    print(results_df)
+def main():
+    X_train, X_valid, X_test, y_train, y_valid, y_test = load_splits()
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    # An optional model from a previous tuning run must not silently enter this run.
+    tuned = MODELS_DIR / "xgboost_tuned.pkl"
+    if tuned.exists():
+        raise RuntimeError("Move the previous xgboost_tuned.pkl before starting a new baseline run.")
+    rows = []
+    for name, model in build_models(y_train).items():
+        model.fit(X_train, y_train)
+        proba = model.predict_proba(X_valid)[:, 1]
+        rows.append({"model": name, "roc_auc": roc_auc_score(y_valid, proba),
+                     "average_precision": average_precision_score(y_valid, proba)})
+        joblib.dump(model, MODELS_DIR / (name + ".pkl"))
+    results = pd.DataFrame(rows).sort_values("roc_auc", ascending=False)
+    results.to_csv(MODELS_DIR / "validation_results.csv", index=False)
+    raw = ROOT / "data/raw/cs-training.csv"
+    metadata = {
+        "seed": 42, "split": "60/20/20 stratified",
+        "primary_metric": "roc_auc",
+        "raw_csv_sha256": hashlib.sha256(raw.read_bytes()).hexdigest(),
+        "rows": {"train": len(y_train), "validation": len(y_valid), "test": len(y_test)},
+        "target_rate": {"train": float(y_train.mean()), "validation": float(y_valid.mean()),
+                        "test": float(y_test.mean())},
+        "python": platform.python_version(),
+        "packages": {p: version(p) for p in ["pandas", "numpy", "scikit-learn", "xgboost", "joblib"]},
+    }
+    (MODELS_DIR / "run.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    print(results.to_string(index=False))
 
 
 if __name__ == "__main__":

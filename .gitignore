@@ -218,3 +218,10 @@ __marimo__/
 .streamlit/secrets.toml
 
 ./data
+# Local datasets, fitted models and borrower-level predictions
+data/
+models/current/
+*.pkl
+.ipynb_checkpoints/
+.venv/
+__pycache__/

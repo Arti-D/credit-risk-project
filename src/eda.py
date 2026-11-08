@@ -4,13 +4,16 @@ from pathlib import Path
 import pandas as pd
 from scipy import stats
 
-DB_PATH = Path("data/processed/credit.db")
-QUERIES_PATH = Path("sql/queries.sql")
+ROOT = Path(__file__).resolve().parents[1]
+DB_PATH = ROOT / "data/processed/credit.db"
+QUERIES_PATH = ROOT / "sql/queries.sql"
 
 
 def run_sql_queries(conn: sqlite3.Connection) -> None:
     raw = QUERIES_PATH.read_text(encoding="utf-8")
-    statements = [s.strip() for s in raw.split(";") if s.strip() and not s.strip().startswith("--")]
+    # Comments precede each SELECT; stripping the whole statement skipped every query.
+    raw = "\n".join(line.split("--", 1)[0] for line in raw.splitlines())
+    statements = [s.strip() for s in raw.split(";") if s.strip()]
 
     for i, stmt in enumerate(statements, 1):
         try:
@@ -37,7 +40,7 @@ def hypothesis_tests(df: pd.DataFrame) -> None:
 
     # H2: возрастная группа vs дефолт (chi-square)
     df["age_group"] = pd.cut(
-        df["age"], bins=[0, 30, 45, 60, 120], labels=["18-29", "30-44", "45-59", "60+"]
+        df["age"], bins=[18, 30, 45, 60, float("inf")], labels=["18-29", "30-44", "45-59", "60+"], right=False
     )
     contingency = pd.crosstab(df["age_group"], df["serious_dlqin2yrs"])
     chi2, p_val_chi, dof, _ = stats.chi2_contingency(contingency)
