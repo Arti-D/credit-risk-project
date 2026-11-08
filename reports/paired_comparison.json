@@ -1,0 +1,8 @@
+{
+  "model": "xgboost",
+  "reference": "logistic_regression",
+  "delta_roc_auc": 0.0061715687562661214,
+  "ci_low": 0.002944119415018548,
+  "ci_high": 0.008802160610375384,
+  "note": "Exploratory comparison; zero in CI means no clear difference on this split."
+}
